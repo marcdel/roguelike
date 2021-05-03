@@ -1,3 +1,5 @@
+use std::cmp;
+
 use tcod::colors::*;
 use tcod::console::*;
 use tcod::input::Key;
@@ -73,6 +75,26 @@ impl Tile {
     }
 }
 
+/// A rectangle on the map, used to characterise a room.
+#[derive(Clone, Copy, Debug)]
+struct Rect {
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+}
+
+impl Rect {
+    pub fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
+        Rect {
+            x1: x,
+            y1: y,
+            x2: x + w,
+            y2: y + h,
+        }
+    }
+}
+
 type Map = Vec<Vec<Tile>>;
 
 struct Game {
@@ -80,9 +102,49 @@ struct Game {
 }
 
 impl Game {
+    pub fn new() -> Self {
+        Game {
+            map: make_map(),
+        }
+    }
+
     pub fn tile_at(&self, x: i32, y: i32) -> Tile {
         self.map[x as usize][y as usize]
     }
+}
+
+fn create_room(map: &mut Map, room: Rect) {
+    for x in (room.x1 + 1)..room.x2 {
+        for y in (room.y1 + 1)..room.y2 {
+            map[x as usize][y as usize] = Tile::empty();
+        }
+    }
+}
+
+fn create_h_tunnel(map: &mut Map, x1: i32, x2: i32, y: i32) {
+    // horizontal tunnel. `min()` and `max()` are used in case `x1 > x2`
+    for x in cmp::min(x1, x2)..(cmp::max(x1, x2) + 1) {
+        map[x as usize][y as usize] = Tile::empty();
+    }
+}
+
+fn create_v_tunnel(map: &mut Map, y1: i32, y2: i32, x: i32) {
+    // vertical tunnel. `min()` and `max()` are used in case `y1 > y2`
+    for y in cmp::min(y1, y2)..(cmp::max(y1, y2) + 1) {
+        map[x as usize][y as usize] = Tile::empty();
+    }
+}
+
+fn make_map() -> Map {
+    let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
+
+    let room1 = Rect::new(20, 15, 10, 15);
+    let room2 = Rect::new(50, 15, 10, 15);
+    create_room(&mut map, room1);
+    create_room(&mut map, room2);
+    create_h_tunnel(&mut map, 25, 55, 23);
+
+    map
 }
 
 fn main() {
@@ -97,11 +159,13 @@ fn main() {
 
     let mut tcod = Tcod { root, con };
 
-    let game = Game { map: make_map() };
+    let game = Game::new();
 
     let mut objects = [
-        Object::new(MAP_WIDTH / 2, MAP_HEIGHT / 2, '@', WHITE),
-        Object::new(MAP_WIDTH / 2 - 5, MAP_HEIGHT / 2, 'X', YELLOW),
+        // Object::new(MAP_WIDTH / 2, MAP_HEIGHT / 2, '@', WHITE),
+        // Object::new(MAP_WIDTH / 2 - 5, MAP_HEIGHT / 2, 'X', YELLOW),
+        Object::new(25, 23, '@', WHITE),
+        Object::new(55, 23, 'X', YELLOW),
     ];
 
     tcod::system::set_fps(LIMIT_FPS);
@@ -146,15 +210,6 @@ fn handle_keys(tcod: &mut Tcod, game: &Game, player: &mut Object) -> bool {
     }
 
     false
-}
-
-fn make_map() -> Map {
-    let mut map = vec![vec![Tile::empty(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
-
-    map[30][22] = Tile::wall();
-    map[50][22] = Tile::wall();
-
-    map
 }
 
 fn render_all(tcod: &mut Tcod, game: &Game, objects: &[Object]) {
