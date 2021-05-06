@@ -126,12 +126,23 @@ struct Object {
     x: i32,
     y: i32,
     char: char,
+    name: String,
     color: Color,
+    blocks: bool,
+    alive: bool,
 }
 
 impl Object {
-    pub fn new(x: i32, y: i32, char: char, color: Color) -> Self {
-        Object { x, y, char, color }
+    pub fn new(x: i32, y: i32, char: char, name: &str, color: Color, blocks: bool) -> Self {
+        Object {
+            x,
+            y,
+            char,
+            name: String::from(name),
+            color,
+            blocks,
+            alive: false,
+        }
     }
 
     pub fn pos(&self) -> (i32, i32) {
@@ -144,10 +155,10 @@ impl Object {
     }
 
     /// move by the given amount, if the destination is not blocked
-    pub fn move_by(&mut self, dx: i32, dy: i32, game: &Game) {
-        if !game.map[(self.x + dx) as usize][(self.y + dy) as usize].blocked {
-            self.x += dx;
-            self.y += dy;
+    fn move_by(id: usize, dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
+        let (x, y) = objects[id].pos();
+        if !is_blocked(x + dx, y + dy, map, objects) {
+            objects[id].set_pos(x + dx, y + dy);
         }
     }
 
@@ -242,6 +253,17 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
     map
 }
 
+fn is_blocked(x: i32, y: i32, map: &Map, objects: &[Object]) -> bool {
+    // first test the map tile
+    if map[x as usize][y as usize].blocked {
+        return true;
+    }
+    // now check for any blocking objects
+    objects
+        .iter()
+        .any(|object| object.blocks && object.pos() == (x, y))
+}
+
 fn render_all(tcod: &mut Tcod, game: &mut Game, objects: &[Object], fov_recompute: bool) {
     if fov_recompute {
         // recompute FOV if needed (the player moved or something)
@@ -303,17 +325,18 @@ fn place_objects(room: Rect, objects: &mut Vec<Object>) {
         let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
         let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
 
-        let mut monster = if rand::random::<f32>() < 0.8 {  // 80% chance of getting an orc
-            Object::new(x, y, 'o', DESATURATED_GREEN) // orc
+        let mut monster = if rand::random::<f32>() < 0.8 {
+            // 80% chance of getting an orc
+            Object::new(x, y, 'o', "", DESATURATED_GREEN, true) // orc
         } else {
-            Object::new(x, y, 'T', DARKER_GREEN) // troll
+            Object::new(x, y, 'T', "", DARKER_GREEN, true) // troll
         };
 
         objects.push(monster);
     }
 }
 
-fn handle_keys(tcod: &mut Tcod, game: &Game, player: &mut Object) -> bool {
+fn handle_keys(tcod: &mut Tcod, game: &Game, objects: &mut [Object]) -> bool {
     use tcod::input::Key;
     use tcod::input::KeyCode::*;
 
@@ -331,10 +354,10 @@ fn handle_keys(tcod: &mut Tcod, game: &Game, player: &mut Object) -> bool {
         Key { code: Escape, .. } => return true, // exit game
 
         // movement keys
-        Key { code: Up, .. } => player.move_by(0, -1, game),
-        Key { code: Down, .. } => player.move_by(0, 1, game),
-        Key { code: Left, .. } => player.move_by(-1, 0, game),
-        Key { code: Right, .. } => player.move_by(1, 0, game),
+        Key { code: Up, .. } => Object::move_by(PLAYER, 0, -1, &game.map, objects),
+        Key { code: Down, .. } => Object::move_by(PLAYER, 0, 1, &game.map, objects),
+        Key { code: Left, .. } => Object::move_by(PLAYER, -1, 0, &game.map, objects),
+        Key { code: Right, .. } => Object::move_by(PLAYER, 1, 0, &game.map, objects),
 
         _ => {}
     }
@@ -359,7 +382,7 @@ fn main() {
     };
 
     // create object representing the player
-    let player = Object::new(0, 0, '@', WHITE);
+    let player = Object::new(0, 0, '@', "Main Character", WHITE, true);
 
     // the list of objects with those two
     let mut objects = vec![player];
@@ -397,7 +420,7 @@ fn main() {
         // handle keys and exit game if needed
         let player = &mut objects[0];
         previous_player_position = (player.x, player.y);
-        let exit = handle_keys(&mut tcod, &game, player);
+        let exit = handle_keys(&mut tcod, &game, &mut objects);
         if exit {
             break;
         }
