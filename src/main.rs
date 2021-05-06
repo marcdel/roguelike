@@ -155,9 +155,9 @@ impl Object {
     }
 
     /// move by the given amount, if the destination is not blocked
-    fn move_by(id: usize, dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
+    fn move_by(id: usize, dx: i32, dy: i32, game: &Game, objects: &mut [Object]) {
         let (x, y) = objects[id].pos();
-        if !is_blocked(x + dx, y + dy, map, objects) {
+        if !is_blocked(x + dx, y + dy, &game.map, objects) {
             objects[id].set_pos(x + dx, y + dy);
         }
     }
@@ -218,7 +218,6 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
 
             // "paint" it to the map's tiles
             create_room(new_room, &mut map);
-            place_objects(new_room, objects);
 
             // center coordinates of the new room, will be useful later
             let (new_x, new_y) = new_room.center();
@@ -228,7 +227,8 @@ fn make_map(objects: &mut Vec<Object>) -> Map {
                 objects[PLAYER].set_pos(new_x, new_y);
             } else {
                 // all rooms after the first:
-                // connect it to the previous room with a tunnel
+
+                place_objects(new_room, &map, objects);
 
                 // center coordinates of the previous room
                 let (prev_x, prev_y) = rooms[rooms.len() - 1].center();
@@ -318,22 +318,31 @@ fn render_all(tcod: &mut Tcod, game: &mut Game, objects: &[Object], fov_recomput
     );
 }
 
-fn place_objects(room: Rect, objects: &mut Vec<Object>) {
+fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
     let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
 
     for _ in 0..num_monsters {
         let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
         let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
 
-        let mut monster = if rand::random::<f32>() < 0.8 {
-            // 80% chance of getting an orc
-            Object::new(x, y, 'o', "", DESATURATED_GREEN, true) // orc
-        } else {
-            Object::new(x, y, 'T', "", DARKER_GREEN, true) // troll
-        };
+        if !is_blocked(x, y, map, objects) {
+            let monster = generate_monster(x, y);
 
-        objects.push(monster);
+            objects.push(monster);
+        }
     }
+}
+
+fn generate_monster(x: i32, y: i32) -> Object {
+    let mut monster = if rand::random::<f32>() < 0.8 {
+        // 80% chance of getting an orc
+        Object::new(x, y, 'o', "Orc", DESATURATED_GREEN, true)
+    } else {
+        Object::new(x, y, 'T', "Troll", DARKER_GREEN, true)
+    };
+    monster.alive = true;
+
+    monster
 }
 
 fn handle_keys(tcod: &mut Tcod, game: &Game, objects: &mut [Object]) -> bool {
@@ -354,10 +363,10 @@ fn handle_keys(tcod: &mut Tcod, game: &Game, objects: &mut [Object]) -> bool {
         Key { code: Escape, .. } => return true, // exit game
 
         // movement keys
-        Key { code: Up, .. } => Object::move_by(PLAYER, 0, -1, &game.map, objects),
-        Key { code: Down, .. } => Object::move_by(PLAYER, 0, 1, &game.map, objects),
-        Key { code: Left, .. } => Object::move_by(PLAYER, -1, 0, &game.map, objects),
-        Key { code: Right, .. } => Object::move_by(PLAYER, 1, 0, &game.map, objects),
+        Key { code: Up, .. } => Object::move_by(PLAYER, 0, -1, &game, objects),
+        Key { code: Down, .. } => Object::move_by(PLAYER, 0, 1, &game, objects),
+        Key { code: Left, .. } => Object::move_by(PLAYER, -1, 0, &game, objects),
+        Key { code: Right, .. } => Object::move_by(PLAYER, 1, 0, &game, objects),
 
         _ => {}
     }
@@ -382,7 +391,8 @@ fn main() {
     };
 
     // create object representing the player
-    let player = Object::new(0, 0, '@', "Main Character", WHITE, true);
+    let mut player = Object::new(0, 0, '@', "Main Character", WHITE, true);
+    player.alive = true;
 
     // the list of objects with those two
     let mut objects = vec![player];
