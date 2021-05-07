@@ -154,14 +154,6 @@ impl Object {
         self.y = y;
     }
 
-    /// move by the given amount, if the destination is not blocked
-    fn move_by(id: usize, dx: i32, dy: i32, game: &Game, objects: &mut [Object]) {
-        let (x, y) = objects[id].pos();
-        if !is_blocked(x + dx, y + dy, &game.map, objects) {
-            objects[id].set_pos(x + dx, y + dy);
-        }
-    }
-
     /// set the color and then draw the character that represents this object at its position
     pub fn draw(&self, con: &mut dyn Console) {
         con.set_default_foreground(self.color);
@@ -379,23 +371,43 @@ fn handle_keys(tcod: &mut Tcod, game: &Game, objects: &mut [Object]) -> PlayerAc
 
         // movement keys
         (Key { code: Up, .. }, _, true) => {
-            Object::move_by(PLAYER, 0, -1, &game, objects);
+            player_move_or_attack(0, -1, game, objects);
             TookTurn
         }
         (Key { code: Down, .. }, _, true) => {
-            Object::move_by(PLAYER, 0, 1, &game, objects);
+            player_move_or_attack(0, 1, game, objects);
             TookTurn
         }
         (Key { code: Left, .. }, _, true) => {
-            Object::move_by(PLAYER, -1, 0, &game, objects);
+            player_move_or_attack(-1, 0, game, objects);
             TookTurn
         }
         (Key { code: Right, .. }, _, true) => {
-            Object::move_by(PLAYER, 1, 0, &game, objects);
+            player_move_or_attack(1, 0, game, objects);
             TookTurn
         }
 
         _ => DidntTakeTurn,
+    }
+}
+
+/// move by the given amount, if the destination is not blocked
+fn move_by(id: usize, dx: i32, dy: i32, map: &Map, objects: &mut [Object]) {
+    let (x, y) = objects[id].pos();
+    if !is_blocked(x + dx, y + dy, &map, objects) {
+        objects[id].set_pos(x + dx, y + dy);
+    }
+}
+
+fn player_move_or_attack(dx: i32, dy: i32, game: &Game, objects: &mut [Object]) {
+    let x = objects[PLAYER].x + dx;
+    let y = objects[PLAYER].y + dy;
+
+    let target_id = objects.iter().position(|object| object.pos() == (x, y));
+
+    match target_id {
+        None => move_by(PLAYER, dx, dy, &game.map, objects),
+        Some(target_id) => println!("You swing and miss {}!", objects[target_id].name),
     }
 }
 
@@ -453,11 +465,22 @@ fn main() {
         tcod.root.flush();
 
         // handle keys and exit game if needed
-        let player = &mut objects[0];
-        previous_player_position = (player.x, player.y);
-        let exit = handle_keys(&mut tcod, &game, &mut objects);
-        if exit == PlayerAction::Exit {
+        previous_player_position = objects[PLAYER].pos();
+        let player_action = handle_keys(&mut tcod, &game, &mut objects);
+        if player_action == PlayerAction::Exit {
             break;
+        }
+
+        // let monsters take their turn
+        if objects[PLAYER].alive && player_action != PlayerAction::DidntTakeTurn {
+            for object in &objects {
+                let is_player = (object as *const _) == (&objects[PLAYER] as *const _);
+                let (x, y) = object.pos();
+
+                if !is_player && tcod.fov.is_in_fov(x, y) {
+                    println!("The {} growls!", object.name);
+                }
+            }
         }
     }
 }
