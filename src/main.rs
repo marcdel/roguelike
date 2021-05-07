@@ -130,6 +130,8 @@ struct Object {
     color: Color,
     blocks: bool,
     alive: bool,
+    fighter: Option<Fighter>,
+    ai: Option<Ai>,
 }
 
 impl Object {
@@ -142,6 +144,8 @@ impl Object {
             color,
             blocks,
             alive: false,
+            fighter: None,
+            ai: None,
         }
     }
 
@@ -166,6 +170,20 @@ enum PlayerAction {
     TookTurn,
     DidntTakeTurn,
     Exit,
+}
+
+// combat-related properties and methods (monster, player, NPC).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Fighter {
+    max_hp: i32,
+    hp: i32,
+    defense: i32,
+    power: i32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Ai {
+    Basic,
 }
 
 fn create_room(room: Rect, map: &mut Map) {
@@ -335,9 +353,25 @@ fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
 fn generate_monster(x: i32, y: i32) -> Object {
     let mut monster = if rand::random::<f32>() < 0.8 {
         // 80% chance of getting an orc
-        Object::new(x, y, 'o', "Orc", DESATURATED_GREEN, true)
+        let mut orc = Object::new(x, y, 'o', "Orc", DESATURATED_GREEN, true);
+        orc.fighter = Some(Fighter {
+            max_hp: 10,
+            hp: 10,
+            defense: 0,
+            power: 3,
+        });
+        orc.ai = Some(Ai::Basic);
+        orc
     } else {
-        Object::new(x, y, 'T', "Troll", DARKER_GREEN, true)
+        let mut troll = Object::new(x, y, 'T', "Troll", DARKER_GREEN, true);
+        troll.fighter = Some(Fighter {
+            max_hp: 16,
+            hp: 16,
+            defense: 1,
+            power: 4,
+        });
+        troll.ai = Some(Ai::Basic);
+        troll
     };
     monster.alive = true;
 
@@ -430,6 +464,12 @@ fn main() {
     // create object representing the player
     let mut player = Object::new(0, 0, '@', "Main Character", WHITE, true);
     player.alive = true;
+    player.fighter = Some(Fighter {
+        max_hp: 30,
+        hp: 30,
+        defense: 2,
+        power: 5,
+    });
 
     // the list of objects with those two
     let mut objects = vec![player];
