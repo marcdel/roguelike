@@ -169,6 +169,13 @@ impl Object {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PlayerAction {
+    TookTurn,
+    DidntTakeTurn,
+    Exit,
+}
+
 fn create_room(room: Rect, map: &mut Map) {
     // go through the tiles in the rectangle and make them passable
     for x in (room.x1 + 1)..room.x2 {
@@ -345,33 +352,51 @@ fn generate_monster(x: i32, y: i32) -> Object {
     monster
 }
 
-fn handle_keys(tcod: &mut Tcod, game: &Game, objects: &mut [Object]) -> bool {
+fn handle_keys(tcod: &mut Tcod, game: &Game, objects: &mut [Object]) -> PlayerAction {
     use tcod::input::Key;
     use tcod::input::KeyCode::*;
+    use PlayerAction::*;
 
     let key = tcod.root.wait_for_keypress(true);
-    match key {
-        Key {
-            code: Enter,
-            alt: true,
-            ..
-        } => {
+    let player_alive = objects[PLAYER].alive;
+
+    match (key, key.text(), player_alive) {
+        (
+            Key {
+                code: Enter,
+                alt: true,
+                ..
+            },
+            _,
+            _,
+        ) => {
             // Alt+Enter: toggle fullscreen
             let fullscreen = tcod.root.is_fullscreen();
             tcod.root.set_fullscreen(!fullscreen);
+            DidntTakeTurn
         }
-        Key { code: Escape, .. } => return true, // exit game
+        (Key { code: Escape, .. }, _, _) => Exit,
 
         // movement keys
-        Key { code: Up, .. } => Object::move_by(PLAYER, 0, -1, &game, objects),
-        Key { code: Down, .. } => Object::move_by(PLAYER, 0, 1, &game, objects),
-        Key { code: Left, .. } => Object::move_by(PLAYER, -1, 0, &game, objects),
-        Key { code: Right, .. } => Object::move_by(PLAYER, 1, 0, &game, objects),
+        (Key { code: Up, .. }, _, true) => {
+            Object::move_by(PLAYER, 0, -1, &game, objects);
+            TookTurn
+        }
+        (Key { code: Down, .. }, _, true) => {
+            Object::move_by(PLAYER, 0, 1, &game, objects);
+            TookTurn
+        }
+        (Key { code: Left, .. }, _, true) => {
+            Object::move_by(PLAYER, -1, 0, &game, objects);
+            TookTurn
+        }
+        (Key { code: Right, .. }, _, true) => {
+            Object::move_by(PLAYER, 1, 0, &game, objects);
+            TookTurn
+        }
 
-        _ => {}
+        _ => DidntTakeTurn,
     }
-
-    false
 }
 
 fn main() {
@@ -431,7 +456,7 @@ fn main() {
         let player = &mut objects[0];
         previous_player_position = (player.x, player.y);
         let exit = handle_keys(&mut tcod, &game, &mut objects);
-        if exit {
+        if exit == PlayerAction::Exit {
             break;
         }
     }
