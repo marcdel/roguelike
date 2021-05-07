@@ -407,15 +407,17 @@ fn render_all(tcod: &mut Tcod, game: &mut Game, objects: &[Object], fov_recomput
         }
     }
 
-    let mut to_draw: Vec<_> = objects.iter().collect();
+    let mut to_draw: Vec<_> = objects
+        .iter()
+        .filter(|o| tcod.fov.is_in_fov(o.x, o.y))
+        .collect();
+
     // sort so that non-blocking objects come first
-    to_draw.sort_by(|o1, o2| { o1.blocks.cmp(&o2.blocks) });
+    to_draw.sort_by(|o1, o2| o1.blocks.cmp(&o2.blocks));
 
     // draw all objects in the list
     for object in &to_draw {
-        if tcod.fov.is_in_fov(object.x, object.y) {
-            object.draw(&mut tcod.con);
-        }
+        object.draw(&mut tcod.con);
     }
 
     // blit the contents of "con" to the root console
@@ -548,14 +550,16 @@ fn player_move_or_attack(dx: i32, dy: i32, game: &Game, objects: &mut [Object]) 
     let x = objects[PLAYER].x + dx;
     let y = objects[PLAYER].y + dy;
 
-    let target_id = objects.iter().position(|object| object.fighter.is_some() && object.pos() == (x, y));
+    let target_id = objects
+        .iter()
+        .position(|object| object.fighter.is_some() && object.pos() == (x, y));
 
     match target_id {
         None => move_by(PLAYER, dx, dy, &game.map, objects),
         Some(target_id) => {
             let (monster, player) = mut_two(target_id, PLAYER, objects);
             player.attack(monster);
-        },
+        }
     }
 }
 
