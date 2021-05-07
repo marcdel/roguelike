@@ -174,6 +174,15 @@ impl Object {
         if let Some(fighter) = self.fighter.as_mut() {
             fighter.hp -= damage;
         }
+
+        // separate block because self.fighter borrowed mutably above
+        // and callback needs to borrow self mutably
+        if let Some(fighter) = self.fighter {
+            if fighter.hp <= 0 {
+                self.alive = false;
+                fighter.on_death.callback(self);
+            }
+        }
     }
 
     pub fn attack(&mut self, target: &mut Object) {
@@ -210,6 +219,45 @@ struct Fighter {
     hp: i32,
     defense: i32,
     power: i32,
+    on_death: DeathCallback,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DeathCallback {
+    Player,
+    Monster,
+}
+
+impl DeathCallback {
+    fn callback(self, object: &mut Object) {
+        use DeathCallback::*;
+        let callback: fn(&mut Object) = match self {
+            Player => player_death,
+            Monster => monster_death,
+        };
+        callback(object);
+    }
+}
+
+fn player_death(player: &mut Object) {
+    // the game ended!
+    println!("You died!");
+
+    // for added effect, transform the player into a corpse!
+    player.char = '%';
+    player.color = DARK_RED;
+}
+
+fn monster_death(monster: &mut Object) {
+    // transform it into a nasty corpse! it doesn't block, can't be
+    // attacked and doesn't move
+    println!("{} is dead!", monster.name);
+    monster.char = '%';
+    monster.color = DARK_RED;
+    monster.blocks = false;
+    monster.fighter = None;
+    monster.ai = None;
+    monster.name = format!("remains of {}", monster.name);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -402,6 +450,7 @@ fn generate_monster(x: i32, y: i32) -> Object {
             hp: 10,
             defense: 0,
             power: 3,
+            on_death: DeathCallback::Monster,
         });
         orc.ai = Some(Ai::Basic);
         orc
@@ -412,6 +461,7 @@ fn generate_monster(x: i32, y: i32) -> Object {
             hp: 16,
             defense: 1,
             power: 4,
+            on_death: DeathCallback::Monster,
         });
         troll.ai = Some(Ai::Basic);
         troll
@@ -558,6 +608,7 @@ fn main() {
         hp: 30,
         defense: 2,
         power: 5,
+        on_death: DeathCallback::Player,
     });
 
     // the list of objects with those two
