@@ -5,6 +5,7 @@ use std::cmp;
 use rand::Rng;
 use tcod::colors::*;
 use tcod::console::*;
+use tcod::input::{self, Event, Key, Mouse};
 use tcod::map::{FovAlgorithm, Map as FovMap};
 
 // actual size of the window
@@ -61,6 +62,8 @@ struct Tcod {
     con: Offscreen,
     panel: Offscreen,
     fov: FovMap,
+    key: Key,
+    mouse: Mouse,
 }
 
 type Map = Vec<Vec<Tile>>;
@@ -451,6 +454,16 @@ fn render_all(tcod: &mut Tcod, game: &mut Game, objects: &[Object], fov_recomput
             DARKER_RED,
         );
 
+        // display names of objects under the mouse
+        tcod.panel.set_default_foreground(LIGHT_GREY);
+        tcod.panel.print_ex(
+            1,
+            0,
+            BackgroundFlag::None,
+            TextAlignment::Left,
+            get_names_under_mouse(tcod.mouse, objects, &tcod.fov),
+        );
+
         // print the game messages, one line at a time
         let mut y = MSG_HEIGHT as i32;
         for &(ref msg, color) in game.messages.iter().rev() {
@@ -581,14 +594,12 @@ fn generate_monster(x: i32, y: i32) -> Object {
 }
 
 fn handle_keys(tcod: &mut Tcod, game: &mut Game, objects: &mut [Object]) -> PlayerAction {
-    use tcod::input::Key;
     use tcod::input::KeyCode::*;
     use PlayerAction::*;
 
-    let key = tcod.root.wait_for_keypress(true);
     let player_alive = objects[PLAYER].alive;
 
-    match (key, key.text(), player_alive) {
+    match (tcod.key, tcod.key.text(), player_alive) {
         (
             Key {
                 code: Enter,
@@ -666,6 +677,20 @@ fn player_move_or_attack(dx: i32, dy: i32, game: &mut Game, objects: &mut [Objec
     }
 }
 
+/// return a string with the names of all objects under the mouse
+fn get_names_under_mouse(mouse: Mouse, objects: &[Object], fov_map: &FovMap) -> String {
+    let (x, y) = (mouse.cx as i32, mouse.cy as i32);
+
+    // create a list with the names of all objects at the mouse's coordinates and in FOV
+    let names = objects
+        .iter()
+        .filter(|obj| obj.pos() == (x, y) && fov_map.is_in_fov(obj.x, obj.y))
+        .map(|obj| obj.name.clone())
+        .collect::<Vec<_>>();
+
+    names.join(", ") // join the names, separated by commas
+}
+
 fn ai_take_turn(monster_id: usize, tcod: &Tcod, game: &mut Game, objects: &mut [Object]) {
     // a basic monster takes its turn. If you can see it, it can see you
     let (monster_x, monster_y) = objects[monster_id].pos();
@@ -710,6 +735,8 @@ fn main() {
         con: Offscreen::new(MAP_WIDTH, MAP_HEIGHT),
         panel: Offscreen::new(SCREEN_WIDTH, PANEL_HEIGHT),
         fov: FovMap::new(MAP_WIDTH, MAP_HEIGHT),
+        key: Default::default(),
+        mouse: Default::default(),
     };
 
     // create object representing the player
@@ -756,6 +783,12 @@ fn main() {
     while !tcod.root.window_closed() {
         // clear the screen of the previous frame
         tcod.con.clear();
+
+        match input::check_for_event(input::MOUSE | input::KEY_PRESS) {
+            Some((_, Event::Mouse(m))) => tcod.mouse = m,
+            Some((_, Event::Key(k))) => tcod.key = k,
+            _ => tcod.key = Default::default(),
+        }
 
         // render the screen
         let fov_recompute = previous_player_position != (objects[PLAYER].pos());
