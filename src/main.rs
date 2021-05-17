@@ -411,8 +411,11 @@ fn cast_lightning(
     game: &mut Game,
     objects: &mut [Object],
 ) -> UseResult {
-    // find closest enemy (inside a maximum range and damage it)
-    let monster_id = closest_monster(tcod, objects, LIGHTNING_RANGE);
+    game.messages.add(
+        "Left-click an enemy to strike it with lightning, or right-click to cancel.",
+        LIGHT_CYAN,
+    );
+    let monster_id = target_monster(tcod, game, objects, Some(LIGHTNING_RANGE as f32));
     if let Some(monster_id) = monster_id {
         // zap it!
         game.messages.add(
@@ -478,8 +481,12 @@ fn cast_confusion(
     game: &mut Game,
     objects: &mut [Object],
 ) -> UseResult {
-    // find closest enemy in-range and confuse it
-    let monster_id = closest_monster(tcod, objects, CONFUSE_RANGE);
+    game.messages.add(
+        "Left-click an enemy to confuse it, or right-click to cancel.",
+        LIGHT_CYAN,
+    );
+    let monster_id = target_monster(tcod, game, objects, Some(CONFUSE_RANGE as f32));
+
     if let Some(monster_id) = monster_id {
         let old_ai = objects[monster_id].ai.take().unwrap_or(Ai::Basic);
         // replace the monster's AI with a "confused" one; after
@@ -993,6 +1000,28 @@ fn player_move_or_attack(dx: i32, dy: i32, game: &mut Game, objects: &mut [Objec
         Some(target_id) => {
             let (monster, player) = mut_two(target_id, PLAYER, objects);
             player.attack(monster, game);
+        }
+    }
+}
+
+/// returns a clicked monster inside FOV up to a range, or None if right-clicked
+fn target_monster(
+    tcod: &mut Tcod,
+    game: &mut Game,
+    objects: &[Object],
+    max_range: Option<f32>,
+) -> Option<usize> {
+    loop {
+        match target_tile(tcod, game, objects, max_range) {
+            Some((x, y)) => {
+                // return the first clicked monster, otherwise continue looping
+                for (id, obj) in objects.iter().enumerate() {
+                    if obj.pos() == (x, y) && obj.fighter.is_some() && id != PLAYER {
+                        return Some(id);
+                    }
+                }
+            }
+            None => return None,
         }
     }
 }
