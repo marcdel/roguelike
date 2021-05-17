@@ -161,12 +161,19 @@ struct Object {
 }
 
 impl Object {
-    pub fn new(x: i32, y: i32, char: char, name: &str, color: Color, blocks: bool) -> Self {
+    pub fn new<T: Into<String>>(
+        x: i32,
+        y: i32,
+        char: char,
+        name: T,
+        color: Color,
+        blocks: bool,
+    ) -> Self {
         Object {
             x,
             y,
             char,
-            name: String::from(name),
+            name: name.into(),
             color,
             blocks,
             alive: false,
@@ -820,26 +827,36 @@ fn place_objects(room: Rect, map: &Map, objects: &mut Vec<Object>) {
 }
 
 fn create_fireball_scroll(x: i32, y: i32) -> Object {
-    let mut object = Object::new(x, y, '#', "scroll of fireball", LIGHT_YELLOW, false);
+    let tooltip = format!(
+        "scroll of fireball ({} damage to all enemies in {} squares)",
+        FIREBALL_DAMAGE, FIREBALL_RADIUS
+    );
+    let mut object = Object::new(x, y, '#', tooltip, LIGHT_YELLOW, false);
     object.item = Some(Item::Fireball);
     object
 }
 
 fn create_confusion_scroll(x: i32, y: i32) -> Object {
     // create a confuse scroll (10% chance)
-    let mut object = Object::new(x, y, '#', "scroll of confusion", LIGHT_YELLOW, false);
+    let tooltip = format!("scroll of confusion ({} turns)", CONFUSE_NUM_TURNS);
+    let mut object = Object::new(x, y, '#', tooltip, LIGHT_YELLOW, false);
     object.item = Some(Item::Confuse);
     object
 }
 
 fn create_healing_potion(x: i32, y: i32) -> Object {
-    let mut object = Object::new(x, y, '!', "healing potion", VIOLET, false);
+    let tooltip = format!("healing potion (+{} hp)", HEAL_AMOUNT);
+    let mut object = Object::new(x, y, '!', tooltip, VIOLET, false);
     object.item = Some(Item::Heal);
     object
 }
 
 fn create_lightning_bolt_scroll(x: i32, y: i32) -> Object {
-    let mut object = Object::new(x, y, '#', "scroll of lightning bolt", LIGHT_YELLOW, false);
+    let tooltip = format!(
+        "scroll of lightning bolt ({} damage to nearest enemy)",
+        LIGHTNING_DAMAGE
+    );
+    let mut object = Object::new(x, y, '#', tooltip, LIGHT_YELLOW, false);
     object.item = Some(Item::Lightning);
     object
 }
@@ -1025,7 +1042,12 @@ fn get_names_under_mouse(mouse: Mouse, objects: &[Object], fov_map: &FovMap) -> 
     let names = objects
         .iter()
         .filter(|obj| obj.pos() == (x, y) && fov_map.is_in_fov(obj.x, obj.y))
-        .map(|obj| obj.name.clone())
+        .map(|obj| match obj.fighter {
+            Some(fighter) => {
+                format!("{} ({}/{})", obj.name, fighter.hp, fighter.max_hp)
+            }
+            None => obj.name.clone(),
+        })
         .collect::<Vec<_>>();
 
     names.join(", ") // join the names, separated by commas
