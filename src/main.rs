@@ -511,29 +511,6 @@ fn cast_confusion(
     }
 }
 
-/// find closest enemy, up to a maximum range, and in the player's FOV
-fn closest_monster(tcod: &Tcod, objects: &[Object], max_range: i32) -> Option<usize> {
-    let mut closest_enemy = None;
-    let mut closest_dist = (max_range + 1) as f32; // start with (slightly more than) maximum range
-
-    for (id, object) in objects.iter().enumerate() {
-        if (id != PLAYER)
-            && object.fighter.is_some()
-            && object.ai.is_some()
-            && tcod.fov.is_in_fov(object.x, object.y)
-        {
-            // calculate distance between this object and the player
-            let dist = objects[PLAYER].distance_to(object);
-            if dist < closest_dist {
-                // it's closer, so remember it
-                closest_enemy = Some(id);
-                closest_dist = dist;
-            }
-        }
-    }
-    closest_enemy
-}
-
 /// add to the player's inventory and remove from the map
 fn pick_item_up(object_id: usize, game: &mut Game, objects: &mut Vec<Object>) {
     if game.inventory.len() >= 26 {
@@ -1275,47 +1252,14 @@ fn main() {
         mouse: Default::default(),
     };
 
-    // create object representing the player
-    let mut player = Object::new(0, 0, '@', "Main Character", WHITE, true);
-    player.alive = true;
-    player.fighter = Some(Fighter {
-        max_hp: 30,
-        hp: 30,
-        defense: 2,
-        power: 5,
-        on_death: DeathCallback::Player,
-    });
+    let (mut game, mut objects) = new_game(&mut tcod);
 
-    // the list of objects with those two
-    let mut objects = vec![player];
+    play_game(&mut tcod, &mut game, &mut objects)
+}
 
-    let mut game = Game {
-        // generate map (at this point it's not drawn to the screen)
-        map: make_map(&mut objects),
-        messages: Messages::new(),
-        inventory: vec![],
-    };
-
-    // populate the FOV map, according to the generated map
-    for y in 0..MAP_HEIGHT {
-        for x in 0..MAP_WIDTH {
-            tcod.fov.set(
-                x,
-                y,
-                !game.map[x as usize][y as usize].block_sight,
-                !game.map[x as usize][y as usize].blocked,
-            );
-        }
-    }
-
+fn play_game(mut tcod: &mut Tcod, mut game: &mut Game, mut objects: &mut Vec<Object>) {
     // force FOV "recompute" first time through the game loop
     let mut previous_player_position = (-1, -1);
-
-    // a warm welcoming message!
-    game.messages.add(
-        "Welcome stranger! Prepare to perish in the Generic Dungeon of Doom.",
-        RED,
-    );
 
     while !tcod.root.window_closed() {
         // clear the screen of the previous frame
@@ -1347,6 +1291,53 @@ fn main() {
                     ai_take_turn(id, &tcod, &mut game, &mut objects);
                 }
             }
+        }
+    }
+}
+
+fn new_game(mut tcod: &mut Tcod) -> (Game, Vec<Object>) {
+    // create object representing the player
+    let mut player = Object::new(0, 0, '@', "Main Character", WHITE, true);
+    player.alive = true;
+    player.fighter = Some(Fighter {
+        max_hp: 30,
+        hp: 30,
+        defense: 2,
+        power: 5,
+        on_death: DeathCallback::Player,
+    });
+
+    // the list of objects with those two
+    let mut objects = vec![player];
+
+    let mut game = Game {
+        // generate map (at this point it's not drawn to the screen)
+        map: make_map(&mut objects),
+        messages: Messages::new(),
+        inventory: vec![],
+    };
+
+    initialise_fov(&mut tcod, &game.map);
+
+    // a warm welcoming message!
+    game.messages.add(
+        "Welcome stranger! Prepare to perish in the Generic Dungeon of Doom.",
+        RED,
+    );
+
+    (game, objects)
+}
+
+fn initialise_fov(tcod: &mut Tcod, map: &Map) {
+    // populate the FOV map, according to the generated map
+    for y in 0..MAP_HEIGHT {
+        for x in 0..MAP_WIDTH {
+            tcod.fov.set(
+                x,
+                y,
+                !map[x as usize][y as usize].block_sight,
+                !map[x as usize][y as usize].blocked,
+            );
         }
     }
 }
