@@ -456,8 +456,8 @@ fn cast_fireball(
         ORANGE,
     );
 
-    for obj in objects {
-        if obj.distance(x, y) <= FIREBALL_RADIUS as f32 && obj.fighter.is_some() {
+    for (id, obj) in objects.iter_mut().enumerate() {
+        if obj.distance(x, y) <= FIREBALL_RADIUS as f32 && obj.fighter.is_some() && id != PLAYER {
             game.messages.add(
                 format!(
                     "The {} gets burned for {} hit points.",
