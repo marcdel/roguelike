@@ -77,6 +77,7 @@ const CONFUSE_NUM_TURNS: i32 = 10;
 const LEVEL_UP_BASE: i32 = 200;
 const LEVEL_UP_FACTOR: i32 = 150;
 const LEVEL_SCREEN_WIDTH: i32 = 40;
+const CHARACTER_SCREEN_WIDTH: i32 = 30;
 
 struct Tcod {
     root: Root,
@@ -331,8 +332,14 @@ fn player_death(player: &mut Object, game: &mut Game) {
 fn monster_death(monster: &mut Object, game: &mut Game) {
     // transform it into a nasty corpse! it doesn't block, can't be
     // attacked and doesn't move
-    game.messages
-        .add(format!("{} is dead!", monster.name), ORANGE);
+    game.messages.add(
+        format!(
+            "{} is dead! You gain {} experience points.",
+            monster.name,
+            monster.fighter.unwrap().xp
+        ),
+        ORANGE,
+    );
     monster.char = '%';
     monster.color = DARK_RED;
     monster.blocks = false;
@@ -366,7 +373,7 @@ impl Messages {
     }
 
     /// Create a `DoubleEndedIterator` over the messages
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item=&(String, Color)> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &(String, Color)> {
         self.messages.iter()
     }
 }
@@ -965,23 +972,42 @@ fn handle_keys(tcod: &mut Tcod, game: &mut Game, objects: &mut Vec<Object>) -> P
         (Key { code: Escape, .. }, _, _) => Exit,
 
         // movement keys
-        (Key { code: Up, .. }, _, true) => {
+        (Key { code: Up, .. }, _, true) | (Key { code: Text, .. }, "w", true) => {
             player_move_or_attack(0, -1, game, objects);
             TookTurn
         }
-        (Key { code: Down, .. }, _, true) => {
+        (Key { code: Down, .. }, _, true) | (Key { code: Text, .. }, "s", true) => {
             player_move_or_attack(0, 1, game, objects);
             TookTurn
         }
-        (Key { code: Left, .. }, _, true) => {
+        (Key { code: Left, .. }, _, true) | (Key { code: Text, .. }, "a", true) => {
             player_move_or_attack(-1, 0, game, objects);
             TookTurn
         }
-        (Key { code: Right, .. }, _, true) => {
+        (Key { code: Right, .. }, _, true) | (Key { code: Text, .. }, "d", true) => {
             player_move_or_attack(1, 0, game, objects);
             TookTurn
         }
-        (Key { code: Text, .. }, "g", true) => {
+        (Key { code: Text, .. }, "q", true) => {
+            player_move_or_attack(-1, -1, game, objects);
+            TookTurn
+        }
+        (Key { code: Text, .. }, "e", true) => {
+            player_move_or_attack(1, -1, game, objects);
+            TookTurn
+        }
+        (Key { code: Text, .. }, "z", true) => {
+            player_move_or_attack(-1, 1, game, objects);
+            TookTurn
+        }
+        (Key { code: Text, .. }, "c", true) => {
+            player_move_or_attack(1, 1, game, objects);
+            TookTurn
+        }
+        (Key { code: Text, .. }, "x", true) => {
+            TookTurn // do nothing, i.e. wait for the monster to come to you
+        }
+        (Key { code: Text, .. }, "f", true) => {
             // pick up an item
             let item_id = objects
                 .iter()
@@ -1013,7 +1039,7 @@ fn handle_keys(tcod: &mut Tcod, game: &mut Game, objects: &mut Vec<Object>) -> P
             }
             DidntTakeTurn
         }
-        (Key { code: Text, .. }, "d", true) => {
+        (Key { code: Text, .. }, "-", true) => {
             // show the inventory; if an item is selected, drop it
             let inventory_index = inventory_menu(
                 &game.inventory,
@@ -1025,7 +1051,63 @@ fn handle_keys(tcod: &mut Tcod, game: &mut Game, objects: &mut Vec<Object>) -> P
             }
             DidntTakeTurn
         }
+        (Key { code: Text, .. }, "h", true) => {
+            // show character information
+            let player = &objects[PLAYER];
+            let level = player.level;
+            let level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR;
+            if let Some(fighter) = player.fighter.as_ref() {
+                let msg = format!(
+                    "Character information
 
+Level: {}
+Experience: {}
+Experience to level up: {}
+
+Maximum HP: {}
+Attack: {}
+Defense: {}",
+                    level, fighter.xp, level_up_xp, fighter.max_hp, fighter.power, fighter.defense
+                );
+                msgbox(&msg, CHARACTER_SCREEN_WIDTH, &mut tcod.root);
+            }
+
+            DidntTakeTurn
+        }
+        (Key { code: Text, .. }, "`", true) => {
+            // Cheat
+            let player = &mut objects[PLAYER];
+            let fighter = player.fighter.as_mut().unwrap();
+            let mut choice = None;
+            while choice.is_none() {
+                // keep asking until a choice is made
+                choice = menu(
+                    "Level up! Choose a stat to raise:\n",
+                    &[
+                        format!("Constitution (+20 HP, from {})", fighter.max_hp),
+                        format!("Strength (+1 attack, from {})", fighter.power),
+                        format!("Agility (+1 defense, from {})", fighter.defense),
+                    ],
+                    LEVEL_SCREEN_WIDTH,
+                    &mut tcod.root,
+                );
+            }
+            match choice.unwrap() {
+                0 => {
+                    fighter.max_hp += 20;
+                    fighter.hp += 20;
+                }
+                1 => {
+                    fighter.power += 1;
+                }
+                2 => {
+                    fighter.defense += 1;
+                }
+                _ => unreachable!(),
+            }
+
+            DidntTakeTurn
+        }
         _ => DidntTakeTurn,
     }
 }
